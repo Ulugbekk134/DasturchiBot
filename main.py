@@ -1,3 +1,16 @@
+import http.server
+import socketserver
+import threading
+
+# Render uchun kichik server (o'chirib qo'ymasligi uchun)
+def run_dummy_server():
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", 10000), handler) as httpd:
+        httpd.serve_forever()
+
+# Serverni alohida oqimda ishga tushirish
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
 import asyncio
 import logging
 import os  # Tizim bilan ishlash uchun qo'shildi
