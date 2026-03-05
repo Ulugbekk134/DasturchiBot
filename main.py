@@ -69,7 +69,7 @@ users_list = set()
 @dp.message(Command("stat"))
 async def show_stat(message: types.Message):
     # O'zingizning ID raqamingizni yozing (Loglarda 518625974 ko'ringan edi)
-    if message.from_user.id == 518625974:
+    if message.from_user.id == 5087939268:
         count = len(users_list)
         await message.answer(f"📊 Botingizdan hozirgacha {count} kishi foydalandi.")
 
