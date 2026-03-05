@@ -1,12 +1,14 @@
 import asyncio
 import logging
+import os  # Tizim bilan ishlash uchun qo'shildi
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from g4f.client import Client  # Yangi AI kutubxonasi
+from g4f.client import Client 
 
 # --- 1. SOZLAMALAR ---
-BOT_TOKEN = "8488087686:AAFbXNCZi6rKsMZQ6eBv6TdOKqA1_ZrOByQ"
+# Tokenni o'rniga buni yozing, bu serverdan tokenni qidiradi
+BOT_TOKEN = os.getenv("BOT_TOKEN") 
 CHANNEL_ID = "@oripov_live"
 
 bot = Bot(token=BOT_TOKEN)
