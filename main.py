@@ -63,6 +63,22 @@ async def handle_ai_query(message: types.Message):
         logging.error(f"Xato: {e}")
         await wait_msg.edit_text("Hozirda AI band. Bir ozdan so'ng qayta urinib ko'ring.")
 
+# Foydalanuvchilar ro'yxati (vaqtincha)
+users_list = set()
+
+@dp.message(Command("stat"))
+async def show_stat(message: types.Message):
+    # O'zingizning ID raqamingizni yozing (Loglarda 518625974 ko'ringan edi)
+    if message.from_user.id == 518625974:
+        count = len(users_list)
+        await message.answer(f"📊 Botingizdan hozirgacha {count} kishi foydalandi.")
+
+# Har safar /start bosilganda foydalanuvchini eslab qolish
+@dp.message(Command("start"), F.chat.type == "private")
+async def start_and_track(message: types.Message):
+    users_list.add(message.from_user.id)
+    # Avvalgi start kodlaringiz shu yerda davom etsin...
+
 # --- 4. ISHGA TUSHIRISH ---
 async def main():
     logging.basicConfig(level=logging.INFO)
