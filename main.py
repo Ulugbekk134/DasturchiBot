@@ -1,34 +1,40 @@
-import http.server
-import socketserver
-import threading
-
-# Render uchun kichik server (o'chirib qo'ymasligi uchun)
-def run_dummy_server():
-    handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", 10000), handler) as httpd:
-        httpd.serve_forever()
-
-# Serverni alohida oqimda ishga tushirish
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-import asyncio
+import os
 import logging
-import os  # Tizim bilan ishlash uchun qo'shildi
+import asyncio
+import threading
+from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from g4f.client import Client 
+from g4f.client import Client
 
-# --- 1. SOZLAMALAR ---
-# Tokenni o'rniga buni yozing, bu serverdan tokenni qidiradi
+# --- 1. RENDER UCHUN "UYG'OQ TUTUVCHI" SERVER (FLASK) ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running 24/7!"
+
+def run_web():
+    # Render 10000 portini avtomatik qidiradi
+    app.run(host="0.0.0.0", port=10000)
+
+# Serverni alohida oqimda (thread) ishga tushirish
+threading.Thread(target=run_web, daemon=True).start()
+
+# --- 2. SOZLAMALAR ---
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
 CHANNEL_ID = "@oripov_live"
+ADMIN_ID = 5087939268 # Sizning ID raqamingiz
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-client = Client() # API key shart emas!
+client = Client()
 
-# --- 2. YORDAMCHI FUNKSIYALAR ---
+# Foydalanuvchilar ro'yxati (Statistika uchun)
+users_list = set()
+
+# --- 3. YORDAMCHI FUNKSIYALAR ---
 async def check_sub(user_id):
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -37,11 +43,15 @@ async def check_sub(user_id):
         logging.error(f"Kanal tekshirishda xato: {e}")
         return False
 
-# --- 3. BUYRUQLAR ---
+# --- 4. BUYRUQLAR ---
+
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message):
+    # Foydalanuvchini statistikaga qo'shish
+    users_list.add(message.from_user.id)
+    
     if await check_sub(message.from_user.id):
-        await message.answer(f"Salom {message.from_user.first_name}! 🚀  senga qanday yordam bera olaman.Tushunmayapgan savolingiz bo'lsa yozing. ")
+        await message.answer(f"Salom {message.from_user.first_name}! 🚀 Senga qanday yordam bera olaman? Tushunmayotgan savolingiz bo'lsa yozing.")
     else:
         btn = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Kanalga a'zo bo'lish ➕", url="https://t.me/oripov_live")],
@@ -56,6 +66,15 @@ async def check_callback(call: types.CallbackQuery):
     else:
         await call.answer("Siz hali a'zo bo'lmadingiz! ❌", show_alert=True)
 
+@dp.message(Command("stat"))
+async def show_stat(message: types.Message):
+    # Faqat admin uchun statistika
+    if message.from_user.id == ADMIN_ID:
+        count = len(users_list)
+        await message.answer(f"📊 Botingizdan hozirgacha {count} kishi foydalandi.")
+    else:
+        await message.answer("Siz admin emassiz! ❌")
+
 @dp.message(F.text)
 async def handle_ai_query(message: types.Message):
     if not await check_sub(message.from_user.id):
@@ -65,7 +84,6 @@ async def handle_ai_query(message: types.Message):
     wait_msg = await message.answer("Javob yuborilmoqda... 🧠⚡️")
     
     try:
-        # GPT-4 orqali javob olish
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": message.text}],
@@ -76,23 +94,7 @@ async def handle_ai_query(message: types.Message):
         logging.error(f"Xato: {e}")
         await wait_msg.edit_text("Hozirda AI band. Bir ozdan so'ng qayta urinib ko'ring.")
 
-# Foydalanuvchilar ro'yxati (vaqtincha)
-users_list = set()
-
-@dp.message(Command("stat"))
-async def show_stat(message: types.Message):
-    # O'zingizning ID raqamingizni yozing (Loglarda 518625974 ko'ringan edi)
-    if message.from_user.id == 5087939268:
-        count = len(users_list)
-        await message.answer(f"📊 Botingizdan hozirgacha {count} kishi foydalandi.")
-
-# Har safar /start bosilganda foydalanuvchini eslab qolish
-@dp.message(Command("start"), F.chat.type == "private")
-async def start_and_track(message: types.Message):
-    users_list.add(message.from_user.id)
-    # Avvalgi start kodlaringiz shu yerda davom etsin...
-
-# --- 4. ISHGA TUSHIRISH ---
+# --- 5. ISHGA TUSHIRISH ---
 async def main():
     logging.basicConfig(level=logging.INFO)
     print(">>> KodBilim AI (GPT-4) bot ishga tushdi...")
