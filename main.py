@@ -2,175 +2,114 @@ import os
 import logging
 import asyncio
 import threading
+import base64
+from io import BytesIO
 from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputFile
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from g4f.client import Client
-import base64
-from io import BytesIO
 
-# --- 1. RENDER UCHUN "UYG'OQ TUTUVCHI" SERVER (FLASK) ---
+# --- SERVERNI UYGOQ TUTISH (FLASK) ---
 app = Flask(__name__)
-
 @app.route('/')
-def home():
-    return "Bot is running 24/7 with Vision & Image Generation!"
+def home(): return "Bot is live!"
 
 def run_web():
-    # Render avtomatik 10000 portni kutadi
     app.run(host="0.0.0.0", port=10000)
 
 threading.Thread(target=run_web, daemon=True).start()
 
-# --- 2. SOZLAMALAR ---
-BOT_TOKEN = os.getenv("BOT_TOKEN") 
+# --- SOZLAMALAR ---
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = "@oripov_live"
-ADMIN_ID = 5087939268 # Sizning ID raqamingiz
+ADMIN_ID = 5087939268 
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 client = Client()
 
-# Foydalanuvchilar ro'yxati (Statistika uchun)
-users_list = set()
-
-# Dasturchi ko'rsatmasi (System prompt)
-SYSTEM_PROMPT = "Sen dasturchilarga yordam beradigan botman. Javoblaringda kod qismlarini har doim ``` o'ramiga olib, dasturlash tilini ko'rsatib yoz. Savolga aniq va qisqa dasturchi tili bilan javob ber."
-
-# --- 3. YORDAMCHI FUNKSIYALAR ---
+# --- OBUNA TEKSHIRISH (TUATILGAN VARIANT) ---
 async def check_sub(user_id):
+    if user_id == ADMIN_ID: return True # Sizga ruxsat
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        return member.status in ['member', 'administrator', 'creator']
+        return member.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logging.error(f"Kanal tekshirishda xato: {e}")
+        logging.error(f"Obuna xatosi: {e}")
         return False
 
-# --- 4. BUYRUQLAR ---
-
+# --- BUYRUQLAR ---
 @dp.message(Command("start"))
-async def start_cmd(message: types.Message):
-    users_list.add(message.from_user.id)
-    
+async def start(message: types.Message):
     if await check_sub(message.from_user.id):
-        await message.answer(f"Salom {message.from_user.first_name}! 🚀 Dasturchilar uchun maxsus AI botga xush kelibsiz. \n\nMen nima qila olaman:\n✅ Savollaringizga dasturchi sifatida javob beraman.\n✅ Rasmdagi kod xatosini topaman.\n✅ /image buyrug'i bilan rasm yasayman.")
+        await message.answer("Salom! Men tayyorman. 🚀\n\n1. Savol yuboring.\n2. /image buyrug'i bilan rasm yasang.\n3. Rasm (kod skrinshoti) yuborsangiz, xatosini topaman.")
     else:
         btn = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Kanalga a'zo bo'lish ➕", url="[https://t.me/oripov_live](https://t.me/oripov_live)")],
-            [InlineKeyboardButton(text="Tekshirish ✅", callback_data="check_sub")]
+            [InlineKeyboardButton(text="Kanalga a'zo bo'lish", url=f"https://t.me/{CHANNEL_ID[1:]}")],
+            [InlineKeyboardButton(text="Tekshirish ✅", callback_data="check")]
         ])
         await message.answer("Botdan foydalanish uchun kanalga a'zo bo'ling!", reply_markup=btn)
 
-@dp.callback_query(F.data == "check_sub")
-async def check_callback(call: types.CallbackQuery):
-    if await check_sub(call.from_user.id):
-        await call.message.edit_text("Rahmat! Endi foydalanishingiz mumkin. 😊")
-    else:
-        await call.answer("Siz hali a'zo bo'lmadingiz! ❌", show_alert=True)
-
-@dp.message(Command("stat"))
-async def show_stat(message: types.Message):
-    if message.from_user.id == ADMIN_ID:
-        count = len(users_list)
-        await message.answer(f"📊 Botingizdan hozirgacha {count} kishi foydalandi.")
-    else:
-        await message.answer("Siz admin emassiz! ❌")
-
-# --- 5. RASM YASASH FUNKSIYASI ---
+# --- RASM YASASH (/image) ---
 @dp.message(Command("image"))
-async def generate_image(message: types.Message):
-    if not await check_sub(message.from_user.id):
-        await message.answer("Avval kanalga a'zo bo'ling!")
-        return
-
-    # /image buyrug'idan keyingi matnni olish
+async def make_image(message: types.Message):
+    if not await check_sub(message.from_user.id): return
+    
     prompt = message.text.replace("/image", "").strip()
     if not prompt:
-        await message.answer("Rasm yasash uchun tasvir yozing. Masalan: `/image neon lit keyboard`", parse_mode="Markdown")
+        await message.answer("Rasm uchun tasvir yozing. Masalan: `/image kod yozayotgan robot`")
         return
 
-    wait_msg = await message.answer("Rasm yasalmoqda... 🎨✨")
-    
+    m = await message.answer("Rasm chizilyapti... 🎨")
     try:
-        # G4F orqali rasm yasash (DALL-E modelidan foydalanadi)
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-        )
-        image_url = response.data[0].url
-        await wait_msg.delete()
-        await bot.send_photo(chat_id=message.chat.id, photo=image_url, caption=f"Tasvir: {prompt}")
-    except Exception as e:
-        logging.error(f"Rasm yasashda xato: {e}")
-        await wait_msg.edit_text("Hozirda rasm yasash xizmati band. Birozdan so'ng qayta urinib ko'ring.")
+        response = client.images.generate(model="dall-e-3", prompt=prompt)
+        await bot.send_photo(message.chat.id, photo=response.data[0].url, caption=f"Tayyor: {prompt}")
+        await m.delete()
+    except:
+        await m.edit_text("Hozir rasm yasab bo'lmadi, qayta urinib ko'ring.")
 
-# --- 6. RASM TAHLIL QILISH FUNKSIYASI (VISION) ---
+# --- RASM TAHLIL QILISH (VISION) ---
 @dp.message(F.photo)
-async def handle_photo(message: types.Message):
-    if not await check_sub(message.from_user.id):
-        await message.answer("Avval kanalga a'zo bo'ling!")
-        return
+async def analyze_photo(message: types.Message):
+    if not await check_sub(message.from_user.id): return
 
-    wait_msg = await message.answer("Rasmni tahlil qilyapman, kuting... 👁️🧠")
-    
+    m = await message.answer("Rasmni ko'ryapman... 👁️")
     try:
-        # Rasmni yuklab olish
-        photo = await bot.get_file(message.photo[-1].file_id)
-        photo_bytes = BytesIO()
-        await bot.download_file(photo.file_path, destination=photo_bytes)
-        photo_bytes.seek(0)
-        
-        # Rasmni base64 formatiga o'tkazish
-        base64_image = base64.b64encode(photo_bytes.getvalue()).decode('utf-8')
-        
-        # GPT-4 Vision orqali tahlil qilish
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Sen dasturchi 'ko'zisan'. Rasmdagi kodni o'qi, agar xato bo'lsa, xatoni topib, to'g'irlab ber. Agar kod bo'lmasa, rasmni dasturchi nuqtai nazaridan tasvirlab ber. Har doim kod bloklarini ishlat."},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Bu rasmdagi kodda xato bormi?"},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ]
-                }
-            ],
-        )
-        answer = response.choices[0].message.content
-        await wait_msg.edit_text(answer)
-    except Exception as e:
-        logging.error(f"Vision xatosi: {e}")
-        await wait_msg.edit_text("Hozirda rasmni tahlil qilish imkonsiz. Kodni matn ko'rinishida yuborib ko'ring.")
+        file = await bot.get_file(message.photo[-1].file_id)
+        file_bytes = BytesIO()
+        await bot.download_file(file.file_path, destination=file_bytes)
+        img_b64 = base64.b64encode(file_bytes.getvalue()).decode()
 
-# --- 7. MATNLI SUHBAT FUNKSIYASI ---
+        response = client.chat.completions.create(
+            model="gpt-4o", # Vision uchun eng yaxshisi
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": "Bu rasmdagi kodda xato bormi? Bo'lsa tuzatib ber."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+            ]}]
+        )
+        await m.edit_text(response.choices[0].message.content)
+    except:
+        await m.edit_text("Rasmdagi kodni o'qib bo'lmadi.")
+
+# --- ODDIY SUHBAT ---
 @dp.message(F.text)
-async def handle_ai_query(message: types.Message):
-    if not await check_sub(message.from_user.id):
-        await message.answer("Avval kanalga a'zo bo'ling!")
-        return
-
-    wait_msg = await message.answer("Javob yuborilmoqda... 🧠⚡️")
-    
+async def chat(message: types.Message):
+    if not await check_sub(message.from_user.id): return
+    m = await message.answer("O'ylayapman... 🧠")
     try:
-        response = client.chat.completions.create(
+        res = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": "Sen dasturchisan. Kodlarni har doim ``` ichida yoz."},
                 {"role": "user", "content": message.text}
-            ],
+            ]
         )
-        answer = response.choices[0].message.content
-        await wait_msg.edit_text(answer)
-    except Exception as e:
-        logging.error(f"Xato: {e}")
-        await wait_msg.edit_text("Hozirda AI band. Bir ozdan so'ng qayta urinib ko'ring.")
+        await m.edit_text(res.choices[0].message.content)
+    except:
+        await m.edit_text("AI hozir javob bera olmaydi.")
 
-# --- 8. ISHGA TUSHIRISH ---
 async def main():
-    logging.basicConfig(level=logging.INFO)
-    print(">>> Dasturchi AI (GPT-4 + Vision) bot ishga tushdi...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
