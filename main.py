@@ -23,7 +23,7 @@ threading.Thread(target=run_web, daemon=True).start()
 
 # --- 2. SOZLAMALAR ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = "@oripov_live"
+CHANNEL_ID = "@website_yaratish_xizmati"
 ADMIN_ID = 5087939268 
 
 bot = Bot(token=BOT_TOKEN)
@@ -69,23 +69,32 @@ async def check_callback(call: types.CallbackQuery):
         await call.answer("Siz hali kanalga a'zo emassiz! ❌", show_alert=True)
 
 # --- 5. RASM YASASH (IMAGE GENERATION) ---
+# --- 5. RASM YASASH (IMAGE GENERATION - YANGILANGAN) ---
 @dp.message(Command("image"))
 async def image_gen(message: types.Message):
-    if not await check_sub(message.from_user.id): return
+    if not await check_sub(message.from_user.id): 
+        return
     
     prompt = message.text.replace("/image", "").strip()
     if not prompt:
         await message.answer("Rasm yasash uchun tasvirlab bering. Masalan: `/image modern coding room`.")
         return
 
-    m = await message.answer("Rasm chizilyapti... 🎨")
+    m = await message.answer("Rasm chizilyapti... 🎨✨")
     try:
-        response = client.images.generate(model="flux", prompt=prompt)
+        # Modelni 'flux'dan 'bing'ga almashtirdik, bu ancha barqaror
+        response = client.images.generate(model="bing", prompt=prompt) 
         await bot.send_photo(message.chat.id, photo=response.data[0].url, caption=f"Sizning so'rovingiz: {prompt}")
         await m.delete()
     except Exception as e:
         logging.error(f"Image Error: {e}")
-        await m.edit_text("Hozir rasm yasab bo'lmadi. Keyinroq urinib ko'ring.")
+        # Agar bing ham xato bersa, google modelini sinab ko'radi
+        try:
+            response = client.images.generate(model="google", prompt=prompt)
+            await bot.send_photo(message.chat.id, photo=response.data[0].url, caption=f"Tasvir (Google AI): {prompt}")
+            await m.delete()
+        except:
+            await m.edit_text("Hozir rasm yasash xizmati band. Birozdan so'ng qayta urinib ko'ring.")
 
 # --- 6. RASM TAHLILI (VISION - XATOLARNI TOPISH) ---
 @dp.message(F.photo)
